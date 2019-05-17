@@ -1,39 +1,35 @@
 import scrapy
-import re
 from scrapy.loader import ItemLoader
 from scrapy.loader.processors import (
-    TakeFirst, Join, Compose, Identity
+    TakeFirst, Join, Compose, MapCompose, Identity
 )
+from .utils import (
+    string_to_number, replace_slash, get_first_if_exists
+)
+
 
 class ProductItem(scrapy.Item):
     name = scrapy.Field()
     brand = scrapy.Field()
     category = scrapy.Field()
     images = scrapy.Field()
+    image_urls = scrapy.Field()
     price = scrapy.Field()
     sale_price = scrapy.Field()
 
-def string_to_number(_str):
-    print('STRRRRRRR----------', _str)
-    _str = ''.join(re.findall(r'\d+', _str))
-    if _str.isdigit():
-        return int(_str)
-    return None
 
 class ProductLoader(ItemLoader):
     default_item_class = ProductItem
-    default_input_processor = TakeFirst()
+    default_output_processor = TakeFirst()
 
-    # name_out = Compose(str.title)
-    # name_out = Compose(str.upper)
-    category_in = Identity()
+    name_in = Compose(get_first_if_exists, str.title)
+    brand_in = Compose(get_first_if_exists, str.upper)
+    category_in = MapCompose(replace_slash)
     category_out = Join('>>')
-    price_out = Compose(string_to_number)
-
-    # sale_price_out = Compose()
-
+    price_out = Compose(get_first_if_exists, string_to_number)
+    sale_price_out = Compose(get_first_if_exists, string_to_number)
+    image_urls_out = Identity()
     
-
     def get_collected_values(self, field_name):
         return (self._values[field_name]
                 if field_name in self._values

@@ -1,15 +1,15 @@
 import scrapy
 from scrapy.spiders import CrawlSpider, Rule
 from scrapy.linkextractors import LinkExtractor
-from scrapy.loader import ItemLoader
+from scrapy.crawler import CrawlerProcess
+from trial.items import ProductLoader
 
-from trial.items import ProductItem, ProductLoader
 
-class MySpider(CrawlSpider):
-    name = 'chefworks'
+class ChefSpider(CrawlSpider):
+    name = 'chef'
     allowed_domains = ['chefworks.com.au']
     start_urls = ['https://www.chefworks.com.au']
-    deny_urls = ('best-sellers', 'womens', 'new', 'urban-collection', )
+    deny_urls = ('best-sellers', 'new', 'urban-collection', )
 
     rules = (
         Rule(
@@ -35,20 +35,31 @@ class MySpider(CrawlSpider):
 
     def parse_item(self, response):
         i = ProductLoader(response=response)
+
+        i.add_css('name', 'h1::text')
+        i.add_xpath(
+            'brand', 
+            "//div[@id='specifications']//strong[contains(., 'Brand')]/../\
+                following-sibling::td/text()"
+        )
         i.add_xpath('category', "//ul[@class='breadcrumb']/li[2]/a/@href")
         i.add_xpath('price', "//div[@class='productprice productpricetext']/text()")
-        # category = response.xpath(
-        #     '//ul[@class="breadcrumb"]/li[2]/a/@href'
-        # ).extract_first().replace('/', '')
-        result = i.load_item()
-        print('LOADED ITEM-------------:', result)
-        from scrapy.shell import inspect_response
-        inspect_response(response, self)
+        
+        # there is no sale price value on chefworks, set default
+        i.add_value('sale_price', None)
+        
+        image_urls = response.xpath("//div[@id='_jstl__images_r']//a/@href").extract()
+        i.add_value('image_urls', self.join_links(image_urls, response))
+
+        self.logger.info('Parse function called on %s', response.url)
         yield i.load_item()
 
-        print('-----------PARSE ITEM')
-        questions = []
+    def join_links(self, urls, response):
+        links = [response.urljoin(url) for url in urls]
+        return links
 
-        for question in questions:
-            item = ProductItem()
-            yield item
+
+# run scrapy from the script
+# process = CrawlerProcess()
+# process.crawl(ChefSpider)
+# process.start()
