@@ -1,42 +1,54 @@
 import scrapy
 from scrapy.spiders import CrawlSpider, Rule
 from scrapy.linkextractors import LinkExtractor
+from scrapy.loader import ItemLoader
 
-from trial.items import ProductItem
+from trial.items import ProductItem, ProductLoader
 
 class MySpider(CrawlSpider):
     name = 'chefworks'
     allowed_domains = ['chefworks.com.au']
     start_urls = ['https://www.chefworks.com.au']
-
-    # start_urls = [
-    #     'https://www.chefworks.com.au/chef-jackets/',
-    #     'https://www.chefworks.com.au/aprons/',
-    #     'https://www.chefworks.com.au/chef-pants/',
-    #     'https://www.chefworks.com.au/shirts/',
-    #     'https://www.chefworks.com.au/headwear/',
-    #     'https://www.chefworks.com.au/accessories/'
-    # ]
-
+    deny_urls = ('best-sellers', 'womens', 'new', 'urban-collection', )
 
     rules = (
-        Rule(LinkExtractor(allow=('', ))),
         Rule(
-            LinkExtractor(allow=r'questions\?page=[0-9]&sort=newest'),
-            callback='parse_item', 
-            follow=True
+            LinkExtractor(
+                restrict_xpaths=("//ul[@class='nav navbar-nav dmenu']/li/a", ),
+                deny=deny_urls
+            )
+        ),
+        Rule(
+            LinkExtractor(
+                allow='\?pgnum=\d',
+                restrict_xpaths=("//i[@class='fa fa-chevron-right']/..", ),
+            )
+        ),
+        Rule(
+            LinkExtractor(
+                restrict_xpaths=("//div[@itemtype='http://schema.org/Product']/a", ),
+            ),
+            callback='parse_item'
         ),
     )
-    
+
 
     def parse_item(self, response):
-        questions = response.xpath('//div[@class="summary"]/h3')
+        i = ProductLoader(response=response)
+        i.add_xpath('category', "//ul[@class='breadcrumb']/li[2]/a/@href")
+        i.add_xpath('price', "//div[@class='productprice productpricetext']/text()")
+        # category = response.xpath(
+        #     '//ul[@class="breadcrumb"]/li[2]/a/@href'
+        # ).extract_first().replace('/', '')
+        result = i.load_item()
+        print('LOADED ITEM-------------:', result)
+        from scrapy.shell import inspect_response
+        inspect_response(response, self)
+        yield i.load_item()
+
+        print('-----------PARSE ITEM')
+        questions = []
 
         for question in questions:
             item = ProductItem()
-            item['name'] = question.xpath(
-                'a[@class="question-hyperlink"]/@href').extract()[0]
-            item['brand'] = question.xpath(
-                'a[@class="question-hyperlink"]/text()').extract()[0]
-            print(item)
             yield item
